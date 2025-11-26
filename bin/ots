@@ -1,0 +1,14 @@
+#!/usr/bin/env php
+<?php
+require __DIR__ . '/../vendor/autoload.php';
+
+use Symfony\Component\Console\Application;
+use OpenTimestamps\CLI\Commands\StampCommand;
+use OpenTimestamps\CLI\Commands\VerifyCommand;
+
+$application = new Application('PHP OpenTimestamps CLI', '1.0.0');
+
+$application->add(new StampCommand());
+$application->add(new VerifyCommand());
+
+$application->run();

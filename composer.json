@@ -1,0 +1,26 @@
+{
+    "name": "yourusername/php-opentimestamps",
+    "description": "PHP OpenTimestamps client with full CLI, SPV verification, batch and detached timestamp support",
+    "type": "project",
+    "require": {
+        "php": ">=8.4",
+        "guzzlehttp/guzzle": "^8.0",
+        "symfony/console": "^6.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "OpenTimestamps\\": "src/"
+        }
+    },
+    "bin": [
+        "bin/ots"
+    ],
+    "scripts": {
+        "test": "phpunit"
+    },
+    "license": "MIT",
+    "minimum-stability": "stable"
+}
