@@ -1,0 +1,12 @@
+{
+  "default_pools": [
+    "https://a.pool.opentimestamps.org",
+    "https://b.pool.opentimestamps.org",
+    "https://a.pool.eternitywall.com",
+    "https://ots.btc.catallaxy.com"
+  ],
+  "metadata": {
+    "source": "https://uptime.opentimestamps.net",
+    "last_checked": "2025-11-26"
+  }
+}

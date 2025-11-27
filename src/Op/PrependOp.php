@@ -1,44 +1,31 @@
 <?php
 
-namespace OpenTimestamps\Ops;
+namespace OpenTimestamps\Op;
 
 use OpenTimestamps\Serialization\BinaryReader;
 use OpenTimestamps\Serialization\BinaryWriter;
 
-/**
- * Prepend raw bytes to a message.
- * OTS OP CODE: 0x0c
- */
-class PrependOp extends Op
-{
+class PrependOp extends Op {
     public const OPCODE = 0x0c;
+    private string $bytes;
 
-    private string $prefix;
-
-    public function __construct(string $prefix)
-    {
-        $this->prefix = $prefix;
+    public function __construct(string $bytes) {
+        $this->bytes = $bytes;
     }
 
-    public function getPrefix(): string
-    {
-        return $this->prefix;
+    public function apply(string $input): string {
+        return $this->bytes . $input;
     }
 
-    public function apply(string $data): string
-    {
-        return $this->prefix . $data;
+    public function serialize(): string {
+        $writer = new BinaryWriter();
+        $writer->writeByte(self::OPCODE);
+        $writer->writeVarBytes($this->bytes);
+        return $writer->getData();
     }
 
-    public function serialize(BinaryWriter $writer): void
-    {
-        $writer->writeVarInt(self::OPCODE);
-        $writer->writeVarBytes($this->prefix);
-    }
-
-    public static function deserialize(BinaryReader $reader): self
-    {
-        $prefix = $reader->readVarBytes();
-        return new self($prefix);
+    public static function fromData(BinaryReader $reader): self {
+        $bytes = $reader->readVarBytes();
+        return new self($bytes);
     }
 }

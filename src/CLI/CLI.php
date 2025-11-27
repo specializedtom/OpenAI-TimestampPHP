@@ -2,9 +2,9 @@
 
 namespace OpenTimestamps\CLI;
 
-require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
 
-use OpenTimestamps\Serialization\TimestampFile;
+use OpenTimestamps\TimestampFile\TimestampFile;
 use OpenTimestamps\Calendar\CalendarClient;
 use OpenTimestamps\Ops\SHA256Op;
 use OpenTimestamps\Ops\AppendOp;

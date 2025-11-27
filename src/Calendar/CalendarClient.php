@@ -3,10 +3,12 @@
 namespace OpenTimestamps\Calendar;
 
 use OpenTimestamps\TimestampFile\TimestampFile;
-use OpenTimestamps\Ops\CalendarCommitOp;
+use OpenTimestamps\Op\CalendarCommitOp;
+use OpenTimestamps\Op\AppendOp;
 use OpenTimestamps\Exception\SerializationException;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Exception\ConnectException;
 
 class CalendarClient
 {
@@ -16,66 +18,98 @@ class CalendarClient
     private float $timeout;
     private bool $verbose;
 
-    public function __construct(
-        array|string $endpoints = 'https://a.pool.opentimestamps.org',
-        float $timeout = 10.0,
-        bool $verbose = false
-    ) {
-        $this->endpoints = is_array($endpoints) ? array_map(fn($e) => rtrim($e, '/'), $endpoints) : [rtrim($endpoints, '/')];
+    public function __construct(array|string $endpoints = 'https://a.pool.opentimestamps.org', float $timeout = 10.0, bool $verbose = false)
+    {
+        $this->endpoints = is_array($endpoints)
+            ? array_map(fn($e) => rtrim($e, '/'), $endpoints)
+            : [rtrim($endpoints, '/')];
+
         $this->timeout = $timeout;
         $this->verbose = $verbose;
     }
 
+
     /**
-     * Stamp a TimestampFile: send leaf hashes to calendar and merge returned attestation.
+     * Stamp a TimestampFile by sending its digest to each endpoint until successful.
+     *
+     * @param TimestampFile $tsFile
+     * @param string $fileDigest 32-byte digest (or empty string to compute)
+     * @return TimestampFile
+     * @throws SerializationException
      */
     public function stamp(TimestampFile $tsFile, string $fileDigest = ''): TimestampFile
     {
-        $digest = $this->computeDigest($tsFile, $fileDigest);
+        // Compute digest if not provided
+        $digest = $fileDigest ?: $tsFile->getMerkleRoot($tsFile->initialDigest ?? '');
+        if (strlen($digest) !== 32) {
+            throw new SerializationException('Digest must be 32 bytes');
+        }
 
         $lastException = null;
+
         foreach ($this->endpoints as $endpoint) {
             $client = new Client(['base_uri' => $endpoint, 'timeout' => $this->timeout]);
             try {
                 if ($this->verbose) {
-                    echo "[CalendarClient] Stamping via $endpoint...\n";
+                    echo "[CalendarClient] Trying endpoint: $endpoint\n";
                 }
 
-                $response = $client->post('/add', [
+                // POST digest to /digest endpoint
+                $response = $client->post('/digest', [
                     'body' => $digest,
                     'headers' => ['Content-Type' => 'application/octet-stream'],
                 ]);
 
-                $attestationData = (string) $response->getBody();
-                $this->mergeAttestation($tsFile, $attestationData);
+                $attestationData = (string)$response->getBody();
+                $tsFile->addOp(new CalendarCommitOp($attestationData));
 
                 if ($this->verbose) {
-                    echo "[CalendarClient] Stamp successful.\n";
+                    echo "[CalendarClient] Stamp successful via $endpoint\n";
                 }
 
                 return $tsFile;
-            } catch (GuzzleException $e) {
+
+            } catch (RequestException | ConnectException $e) {
                 $lastException = $e;
                 if ($this->verbose) {
-                    echo "[CalendarClient] Failed to stamp via $endpoint: {$e->getMessage()}\n";
+                    $msg = $e->getMessage();
+                    echo "[CalendarClient] Failed on $endpoint: $msg\n";
                 }
-                // Try next endpoint
             }
         }
 
-        throw new SerializationException('Calendar request failed on all endpoints: ' . ($lastException?->getMessage() ?? 'unknown error'));
+        throw new SerializationException(
+            'Stamping failed on all endpoints: ' . ($lastException?->getMessage() ?? 'unknown error')
+        );
     }
 
+
     /**
-     * Compute digest of TimestampFile leaves (Merkle root of all ops applied to file hash)
+     * Compute 32-byte SHA256 digest of original data in TimestampFile.
      */
-    private function computeDigest(TimestampFile $tsFile, string $fileDigest = ''): string
+    private function computeDigest(TimestampFile $tsFile): string
     {
-        return $tsFile->getMerkleRoot($fileDigest);
+        // Get Merkle root
+        $merkleRoot = $tsFile->getMerkleRoot('');
+
+        // If it returns hex string, convert to binary
+        if (strlen($merkleRoot) === 64 && ctype_xdigit($merkleRoot)) {
+            return hex2bin($merkleRoot);
+        }
+
+        // If already binary 32 bytes
+        if (strlen($merkleRoot) === 32) {
+            return $merkleRoot;
+        }
+
+        throw new \RuntimeException(
+            'Computed digest is invalid length: ' . strlen($merkleRoot)
+        );
+
     }
 
     /**
-     * Merge attestation data returned from calendar into the TimestampFile.
+     * Merge attestation data into TimestampFile.
      */
     private function mergeAttestation(TimestampFile $tsFile, string $attestationData): void
     {

@@ -1,8 +1,9 @@
 <?php
 
+namespace OpenTimestamps\Op;
+
 use OpenTimestamps\Serialization\BinaryReader;
 use OpenTimestamps\Serialization\BinaryWriter;
-use OpenTimestamps\Exception\SerializationException;
 
 class CalendarCommitOp extends Op {
     public const OPCODE = 0x06;
@@ -13,7 +14,7 @@ class CalendarCommitOp extends Op {
     }
 
     public function apply(string $input): string {
-        return $input;
+        return $input; // Calendar commit does not alter digest
     }
 
     public function serialize(): string {
@@ -23,8 +24,8 @@ class CalendarCommitOp extends Op {
         return $writer->getData();
     }
 
-    public static function fromData(string $data): self {
-        $reader = new BinaryReader(substr($data, 1));
-        return new self($reader->readVarBytes());
+    public static function fromData(BinaryReader $reader): self {
+        $attestation = $reader->readVarBytes();
+        return new self($attestation);
     }
 }

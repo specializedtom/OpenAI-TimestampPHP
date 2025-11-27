@@ -1,52 +1,50 @@
 <?php
 
-namespace OpenTimestamps\Ops;
+namespace OpenTimestamps\Op;
 
 use OpenTimestamps\Exception\SerializationException;
 use OpenTimestamps\Serialization\BinaryReader;
 
-/**
- * Factory for constructing Ops from opcode values.
- */
 class OpFactory
 {
-    /**
-     * Map of opcode → Op class.
-     *
-     * @var array<int, class-string<Op>>
-     */
-    private static array $opcodeMap = [
-        SHA1Op::OPCODE            => SHA1Op::class,
-        SHA256Op::OPCODE          => SHA256Op::class,
-        AppendOp::OPCODE          => AppendOp::class,
-        PrependOp::OPCODE         => PrependOp::class,
-        CalendarCommitOp::OPCODE  => CalendarCommitOp::class,
-        OpReturnOp::OPCODE        => OpReturnOp::class,
-        BitcoinBlockHeaderOp::OPCODE => BitcoinBlockHeaderOp::class
-        // add more ops as you implement them
-    ];
+    /** @var array<int, class-string<Op>> */
+    private static array $registry = [];
+
+    // Register all Ops once
+    public static function registerAll(): void
+    {
+        self::register(SHA256Op::OPCODE, SHA256Op::class);
+        self::register(SHA1Op::OPCODE, SHA1Op::class);
+        self::register(RIPEMD160Op::OPCODE, RIPEMD160Op::class);
+        self::register(AppendOp::OPCODE, AppendOp::class);
+        self::register(PrependOp::OPCODE, PrependOp::class);
+        self::register(CalendarCommitOp::OPCODE, CalendarCommitOp::class);
+        self::register(OpReturnOp::OPCODE, OpReturnOp::class);
+        self::register(BitcoinBlockHeaderOp::OPCODE, BitcoinBlockHeaderOp::class);
+    }
+
+    public static function register(int $opcode, string $className): void
+    {
+        self::$registry[$opcode] = $className;
+    }
 
     /**
-     * Deserialize an operation from a BinaryReader.
-     *
-     * @throws SerializationException
+     * Deserialize an Op from a BinaryReader
+     * Opcode must not have been read yet
      */
     public static function deserialize(BinaryReader $reader): Op
     {
-        $opcode = $reader->readVarInt();
+        $opcode = $reader->readByte();
 
-        if (!isset(self::$opcodeMap[$opcode])) {
-            throw new SerializationException(
-                sprintf("Unknown Op opcode: 0x%02x", $opcode)
-            );
+        if (!isset(self::$registry[$opcode])) {
+            throw new SerializationException("Unknown opcode: $opcode");
         }
 
-        $class = self::$opcodeMap[$opcode];
+        $class = self::$registry[$opcode];
 
-        if (!is_subclass_of($class, Op::class)) {
-            throw new SerializationException("Invalid Op class for opcode $opcode");
-        }
+        /** @var Op $op */
+        $op = $class::fromData($reader);
 
-        return $class::deserialize($reader);
+        return $op;
     }
 }

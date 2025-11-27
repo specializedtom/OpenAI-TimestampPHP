@@ -1,8 +1,9 @@
 <?php
 
+namespace OpenTimestamps\Op;
+
 use OpenTimestamps\Serialization\BinaryReader;
 use OpenTimestamps\Serialization\BinaryWriter;
-use OpenTimestamps\Exception\SerializationException;
 
 class AppendOp extends Op {
     public const OPCODE = 0x02;
@@ -23,8 +24,8 @@ class AppendOp extends Op {
         return $writer->getData();
     }
 
-    public static function fromData(string $data): self {
-        $reader = new BinaryReader(substr($data, 1));
-        return new self($reader->readVarBytes());
+    public static function fromData(BinaryReader $reader): self {
+        $bytes = $reader->readVarBytes();
+        return new self($bytes);
     }
 }

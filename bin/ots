@@ -3,12 +3,25 @@
 require __DIR__ . '/../vendor/autoload.php';
 
 use Symfony\Component\Console\Application;
-use OpenTimestamps\CLI\Commands\StampCommand;
-use OpenTimestamps\CLI\Commands\VerifyCommand;
+use OpenTimestamps\CLI\StampCommand;
+use OpenTimestamps\CLI\VerifyCommand;
+use OpenTimestamps\CLI\PoolsCommand;
+use OpenTimestamps\CLI\SubmitCommand;
+use OpenTimestamps\CLI\InfoCommand;
+use OpenTimestamps\CLI\UpgradeCommand;
+use OpenTimestamps\CLI\StatusCommand;
+use OpenTimestamps\Op\OpFactory;
+
+OpFactory::registerAll();
 
 $application = new Application('PHP OpenTimestamps CLI', '1.0.0');
 
 $application->add(new StampCommand());
 $application->add(new VerifyCommand());
+$application->add(new PoolsCommand());
+$application->add(new SubmitCommand());
+$application->add(new InfoCommand());
+$application->add(new UpgradeCommand());
+$application->add(new StatusCommand());
 
 $application->run();
