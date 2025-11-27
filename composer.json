@@ -21,9 +21,15 @@
     "scripts": {
         "test": "phpunit"
     },
+    "extra": {
+        "ots": {
+            "pools-file": "default_pools.json"
+        }
+    },
     "license": "MIT",
     "minimum-stability": "dev",
     "config": {
 	"vendor-dir": "vendor"
     }
 }
+

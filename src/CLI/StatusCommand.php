@@ -11,6 +11,9 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use OpenTimestamps\TimestampFile\TimestampFile;
 use OpenTimestamps\Calendar\CalendarClient;
+use OpenTimestamps\Ops\Op;
+use OpenTimestamps\Ops\TimestampOp;
+use OpenTimestamps\Attestation\BitcoinAttestation;
 
 class StatusCommand extends Command
 {
@@ -22,7 +25,8 @@ class StatusCommand extends Command
             ->setName('status')
             ->setDescription('Monitor the status of a .ots file')
             ->addArgument('ots', InputArgument::REQUIRED, 'Path to .ots file to monitor')
-            ->addOption('interval', null, InputOption::VALUE_OPTIONAL, 'Polling interval in seconds', 30);
+            ->addOption('interval', null, InputOption::VALUE_OPTIONAL, 'Polling interval in seconds', 30)
+            ->addOption('pools', null, InputOption::VALUE_OPTIONAL, 'Path to JSON file containing calendar pools');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -36,17 +40,20 @@ class StatusCommand extends Command
             return Command::FAILURE;
         }
 
-        $output->writeln("Monitoring OTS status for $otsFile");
+        // Load calendar URLs from JSON (centralized)
+        $poolsFile = $input->getOption('pools') ?? null; // will be handled by PoolLoader
+        $calendarUrls = PoolLoader::load($output, $poolsFile);
 
-        $calendarUrls = [
-            'https://a.pool.opentimestamps.org',
-            'https://b.pool.opentimestamps.org',
-            'https://a.pool.eternitywall.com',
-            'https://ots.btc.catallaxy.com',
-        ];
+        if (empty($calendarUrls)) {
+            $output->writeln('<error>No calendar endpoints found in pools JSON.</error>');
+            return Command::FAILURE;
+        }
+
+        $output->writeln("Monitoring OTS status for $otsFile");
 
         while (true) {
             $data = file_get_contents($otsFile);
+
             try {
                 $tsFile = TimestampFile::deserialize($data);
             } catch (\Exception $e) {
@@ -70,7 +77,7 @@ class StatusCommand extends Command
                 $stamped = false;
                 try {
                     $calendar = new CalendarClient($url);
-                    $calendar->stamp($tsFile); // Attempts to fetch attestation
+                    $calendar->stamp($tsFile);
                     $stamped = true;
                 } catch (\Exception $e) {
                     if ($verbose) {
@@ -84,24 +91,59 @@ class StatusCommand extends Command
                 ];
             }
 
-            $output->writeln("+----------+-----------------------------------+----------+-----------+");
-            $output->writeln("| Calendar | URL                               | Stamped? | Leaf Hash |");
-            $output->writeln("+----------+-----------------------------------+----------+-----------+");
+            [$confirmed, $timeSince, $explorerLink] = $this->getBitcoinInfo($tsFile);
+
+            $output->writeln("+----------+-----------------------------------+----------+-----------+----------------+--------------------------+");
+            $output->writeln("| Calendar | URL                               | Stamped? | Leaf Hash | Confirmed?     | Block Link               |");
+            $output->writeln("+----------+-----------------------------------+----------+-----------+----------------+--------------------------+");
             foreach ($results as $res) {
                 $output->writeln(sprintf(
-                    "| %-8s | %-33s | %-8s | %-9s |",
+                    "| %-8s | %-33s | %-8s | %-9s | %-14s | %-24s |",
                     $res['idx'],
                     $res['url'],
                     $res['stamped'] ? '✔' : '❌',
-                    $leafHash ? substr($leafHex, 0, 8) . '...' : 'N/A'
+                    $leafHash ? substr($leafHex, 0, 8) . '...' : 'N/A',
+                    $confirmed ? $timeSince : 'N/A',
+                    $explorerLink ?? 'N/A'
                 ));
             }
-            $output->writeln("+----------+-----------------------------------+----------+-----------+");
+            $output->writeln("+----------+-----------------------------------+----------+-----------+----------------+--------------------------+");
 
             sleep($interval);
         }
 
         return Command::SUCCESS;
+    }
 
+    private function getBitcoinInfo(TimestampFile $tsFile): array
+    {
+        $stack = $tsFile->getOps();
+        while (!empty($stack)) {
+            $current = array_pop($stack);
+            if ($current instanceof TimestampOp) {
+                foreach ($current->attestations as $att) {
+                    if ($att instanceof BitcoinAttestation) {
+                        $timeSince = isset($att->blockTime) ? self::formatTimeDelta(time() - $att->blockTime) : 'N/A';
+                        $explorerLink = $att->blockHash ? 'https://mempool.space/block/' . $att->blockHash : null;
+                        return [true, $timeSince, $explorerLink];
+                    }
+                }
+            }
+            if (property_exists($current, 'ops') && is_array($current->ops)) {
+                foreach ($current->ops as $child) {
+                    $stack[] = $child;
+                }
+            }
+        }
+
+        return [false, 'N/A', null];
+    }
+
+    private static function formatTimeDelta(int $seconds): string
+    {
+        $hours = floor($seconds / 3600);
+        $minutes = floor(($seconds % 3600) / 60);
+        $secs = $seconds % 60;
+        return sprintf('%02dh %02dm %02ds', $hours, $minutes, $secs);
     }
 }

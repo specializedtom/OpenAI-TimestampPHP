@@ -23,7 +23,8 @@ class UpgradeCommand extends Command
             ->setName('upgrade')
             ->setDescription('Upgrade a .ots timestamp file by fetching missing calendar attestations')
             ->addArgument('ots', InputArgument::REQUIRED, 'Path to .ots file to upgrade')
-            ->addOption('out', null, InputOption::VALUE_OPTIONAL, 'Output upgraded .ots file path');
+            ->addOption('out', null, InputOption::VALUE_OPTIONAL, 'Output upgraded .ots file path')
+            ->addOption('pools', null, InputOption::VALUE_OPTIONAL, 'Path to JSON file containing calendar pools');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -36,6 +37,12 @@ class UpgradeCommand extends Command
             return Command::FAILURE;
         }
 
+        // Load calendar endpoints from JSON (Composer extra or CLI)
+        $poolsFile = $input->getOption('pools') ?? null;
+        $calendarUrls = PoolLoader::load($output, $poolsFile);
+
+        $calendar = new CalendarClient($calendarUrls);
+
         try {
             $tsFile = TimestampFile::deserialize(file_get_contents($otsFile));
         } catch (SerializationException $e) {
@@ -43,13 +50,10 @@ class UpgradeCommand extends Command
             return Command::FAILURE;
         }
 
-        $calendar = new CalendarClient();
-
         try {
             $tsFile = $calendar->stamp($tsFile); // fetch missing attestations
         } catch (\Exception $e) {
             $output->writeln('<comment>Warning: unable to fetch attestations: ' . $e->getMessage() . '</comment>');
-            // continue anyway — partial upgrade is fine
         }
 
         file_put_contents($outFile, $tsFile->serialize());

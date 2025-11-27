@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use OpenTimestamps\TimestampFile\TimestampFile;
@@ -20,12 +21,14 @@ class InfoCommand extends Command
         $this
             ->setName('info')
             ->setDescription('Show info about a .ots file')
-            ->addArgument('otsfile', InputArgument::REQUIRED, 'Path to the .ots file');
+            ->addArgument('otsfile', InputArgument::REQUIRED, 'Path to the .ots file')
+            ->addOption('pools', null, InputOption::VALUE_OPTIONAL, 'Path to JSON file containing calendar pools');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $otsFilePath = $input->getArgument('otsfile');
+        $poolsFile = $input->getOption('pools') ?? null;
 
         if (!file_exists($otsFilePath)) {
             $output->writeln('<error>OTS file not found: ' . $otsFilePath . '</error>');
@@ -55,6 +58,17 @@ class InfoCommand extends Command
 
         } catch (\Exception $e) {
             $output->writeln('<comment>Leaf hash not yet computable: ' . $e->getMessage() . '</comment>');
+        }
+
+        // Load calendar URLs from JSON for possible future use
+        $calendarUrls = PoolLoader::load($output, $poolsFile);
+        if (!empty($calendarUrls)) {
+            $output->writeln('<info>Calendar endpoints loaded from pools JSON:</info>');
+            foreach ($calendarUrls as $url) {
+                $output->writeln(' - ' . $url);
+            }
+        } else {
+            $output->writeln('<comment>No calendar endpoints found or pools JSON not provided.</comment>');
         }
 
         return Command::SUCCESS;
